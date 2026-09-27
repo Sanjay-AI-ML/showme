@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-27",
+  "framework": "React 19 and Vite 7",
+  "fonts": ["DM Sans", "Manrope"],
+  "palette": "Existing warm green and light neutral surfaces",
+  "motion": "No motion library; restrained CSS state transitions",
+  "spacing": "Existing stylesheet has ad hoc spacing; Hallmark overrides use a four-point scale",
+  "sources": ["package.json", "client/src/styles.css"]
+}
