@@ -48,6 +48,10 @@ app.post('/api/mode', requireSameOrigin, (req, res) => {
 app.post('/api/focus', requireSameOrigin, (req, res) => {
   res.json(store.setFocus(session(req, res), (req.body?.focus ?? null) as FocusTarget | null));
 });
+app.post('/api/validation-event', requireSameOrigin, (req, res) => {
+  store.recordValidationEvent(session(req, res), req.body);
+  res.json({ ok: true });
+});
 app.post('/api/voice-token', requireSameOrigin, async (req, res, next) => {
   try {
     const token = session(req, res);

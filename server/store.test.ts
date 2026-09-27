@@ -76,3 +76,22 @@ test('undo rejects a conflict instead of overwriting a newer manual change', () 
   assert.throws(() => edit(store, token, 'undo'), (error: unknown) => error instanceof AppError && error.code === 'undo_conflict');
   assert.equal(store.getState(token).invoice.deliveryCents, 70000);
 });
+
+test('validation report counts outcomes without recording conversation content', () => {
+  const { store, token } = fixture();
+  store.recordValidationEvent(token, { kind: 'session_started', channel: 'text', content: 'private request' });
+  store.recordValidationEvent(token, { kind: 'turn', channel: 'text' });
+  store.recordValidationEvent(token, { kind: 'helpful_no', channel: null });
+  store.recordValidationEvent(token, { kind: 'helpful_yes', channel: null });
+  edit(store, token, 'select_customer', { customerId: 'sunrise' });
+  edit(store, token, 'upsert_item', { productId: 'chair', quantity: 2 });
+  edit(store, token, 'save_draft');
+  assert.deepEqual(store.validationReport(), {
+    voiceSessions: 0, textSessions: 1, userTurns: 1, assistantErrors: 0,
+    draftsSaved: 1, agentEditedDrafts: 1, feedbackHelpful: 1, feedbackNeedsWork: 0,
+  });
+  const raw = store.db.prepare('SELECT * FROM validation_events LIMIT 1').get() as Record<string, unknown>;
+  assert.equal('content' in raw, false);
+  assert.throws(() => store.recordValidationEvent(token, { kind: 'unknown', channel: 'text' }),
+    (error: unknown) => error instanceof AppError && error.code === 'invalid_validation_event');
+});

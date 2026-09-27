@@ -37,6 +37,10 @@ interface WorkspaceRow { id: string; token_hash: string; invoice_json: string; m
 interface ActionRow { id: string; operation: EditOperation; request_id: string; source: string; before_json: string; after_json: string; receipt_json: string; undone_by: string | null }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const clone = <T>(value: T): T => structuredClone(value);
+const validationEventSchema = z.object({
+  kind: z.enum(['session_started', 'session_stopped', 'turn', 'assistant_error', 'helpful_yes', 'helpful_no']),
+  channel: z.enum(['voice', 'text']).nullable(),
+});
 
 export class Store {
   readonly db: DatabaseSync;
@@ -54,6 +58,11 @@ export class Store {
       UNIQUE(workspace_id, request_id)
     );
     CREATE INDEX IF NOT EXISTS actions_by_workspace ON actions(workspace_id);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS validation_events (
+      id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, kind TEXT NOT NULL,
+      channel TEXT, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS validation_events_by_workspace ON validation_events(workspace_id);`);
   }
 
   createWorkspace(): string {
@@ -77,6 +86,33 @@ export class Store {
 
   hasWorkspace(token: string): boolean {
     return Boolean(this.db.prepare('SELECT id FROM workspaces WHERE token_hash = ?').get(hash(token)));
+  }
+
+  recordValidationEvent(token: string, unknownEvent: unknown): void {
+    const parsed = validationEventSchema.safeParse(unknownEvent);
+    if (!parsed.success) throw new AppError(400, 'invalid_validation_event', 'Unsupported validation event.');
+    const workspace = this.row(token);
+    const { kind, channel } = parsed.data;
+    if (kind.startsWith('helpful_')) {
+      this.db.prepare("DELETE FROM validation_events WHERE workspace_id = ? AND kind IN ('helpful_yes', 'helpful_no')")
+        .run(workspace.id);
+    }
+    this.db.prepare('INSERT INTO validation_events VALUES (?, ?, ?, ?, ?)')
+      .run(randomUUID(), workspace.id, kind, channel, new Date().toISOString());
+  }
+
+  validationReport() {
+    const count = (sql: string) => (this.db.prepare(sql).get() as { total: number }).total;
+    return {
+      voiceSessions: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'session_started' AND channel = 'voice'"),
+      textSessions: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'session_started' AND channel = 'text'"),
+      userTurns: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'turn'"),
+      assistantErrors: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'assistant_error'"),
+      draftsSaved: count("SELECT COUNT(DISTINCT workspace_id) AS total FROM actions WHERE operation = 'save_draft'"),
+      agentEditedDrafts: count("SELECT COUNT(DISTINCT workspace_id) AS total FROM actions WHERE source = 'agent' AND operation NOT IN ('undo', 'save_draft')"),
+      feedbackHelpful: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'helpful_yes'"),
+      feedbackNeedsWork: count("SELECT COUNT(*) AS total FROM validation_events WHERE kind = 'helpful_no'"),
+    };
   }
 
   getState(token: string): AppState {

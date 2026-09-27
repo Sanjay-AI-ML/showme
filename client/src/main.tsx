@@ -25,6 +25,8 @@ function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Voice off');
+  const [connecting, setConnecting] = useState(false);
+  const [feedback, setFeedback] = useState<'yes' | 'no' | null>(null);
   const [error, setError] = useState('');
   const [typed, setTyped] = useState('');
   const [messages, setMessages] = useState<Message[]>([
@@ -36,9 +38,11 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = host.onChange(setState);
+    const endOnPageHide = () => { void voiceRef.current?.stop(); };
+    window.addEventListener('pagehide', endOnPageHide);
     void host.getContext().catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not load invoice.'));
     void api.capabilities().then((result) => setVoiceAvailable(result.voice)).catch(() => {});
-    return () => { unsubscribe(); void voiceRef.current?.stop(); if (highlightTimer.current) clearTimeout(highlightTimer.current); };
+    return () => { unsubscribe(); window.removeEventListener('pagehide', endOnPageHide); void voiceRef.current?.stop(); if (highlightTimer.current) clearTimeout(highlightTimer.current); };
   }, []);
 
   const total = useMemo(() => state ? calculateTotal(state.invoice, state.products) : 0, [state]);
@@ -46,8 +50,13 @@ function App() {
   const steps = [Boolean(customer), Boolean(state?.invoice.items.length), state?.invoice.status === 'saved'];
   const progress = steps.filter(Boolean).length;
 
+  function track(kind: string, channel: 'voice' | 'text' | null = null) {
+    void api.validationEvent(kind, channel).catch(() => {});
+  }
+
   function addMessage(speaker: Message['speaker'], text: string) {
     if (!text.trim()) return;
+    if (speaker === 'user') track('turn', voiceRef.current?.inputMode ?? null);
     setMessages((current) => [...current.slice(-30), { id: crypto.randomUUID(), speaker, text }]);
   }
 
@@ -81,27 +90,51 @@ function App() {
     highlightTimer.current = setTimeout(() => setHighlight(null), 5000);
   }
 
-  async function toggleVoice() {
-    if (voiceRef.current) {
-      await voiceRef.current.stop(); voiceRef.current = null; return;
-    }
-    setError('');
-    const voice = new ShowMeVoice(host, {
+  function makeAgent() {
+    return new ShowMeVoice(host, {
       status: setVoiceStatus, transcript: addMessage,
-      error: setError, highlight: showHighlight,
+      error: (message) => { setError(message); track('assistant_error', voiceRef.current?.inputMode ?? null); },
+      highlight: showHighlight,
     });
-    voiceRef.current = voice;
-    try { await voice.start(); }
-    catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not start voice.');
-      await voice.stop(); voiceRef.current = null;
-    }
   }
 
-  function sendTyped() {
+  async function toggleVoice() {
+    if (voiceRef.current?.inputMode === 'voice') {
+      await voiceRef.current.stop(); voiceRef.current = null; track('session_stopped', 'voice'); return;
+    }
+    setError('');
+    setConnecting(true);
+    if (voiceRef.current) { const previousMode = voiceRef.current.inputMode; await voiceRef.current.stop(); track('session_stopped', previousMode); }
+    const voice = makeAgent();
+    voiceRef.current = voice;
+    try { await voice.start('voice'); track('session_started', 'voice'); }
+    catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not start voice.');
+      track('assistant_error', 'voice'); await voice.stop(); voiceRef.current = null;
+    } finally { setConnecting(false); }
+  }
+
+  async function sendTyped() {
     const text = typed.trim(); if (!text) return;
-    try { voiceRef.current?.sayText(text); setTyped(''); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Start voice first.'); }
+    if (!voiceAvailable || connecting) return;
+    setError(''); setConnecting(true);
+    let agent = voiceRef.current;
+    try {
+      if (!agent?.isReady()) {
+        if (agent) { const previousMode = agent.inputMode; await agent.stop(); track('session_stopped', previousMode); }
+        agent = makeAgent();
+        voiceRef.current = agent;
+        await agent.start('text');
+        track('session_started', 'text');
+      }
+      agent.sayText(text);
+      setTyped('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not send the message.');
+      track('assistant_error', agent?.inputMode ?? 'text');
+      if (agent) await agent.stop();
+      if (voiceRef.current === agent) voiceRef.current = null;
+    } finally { setConnecting(false); }
   }
 
   if (!state) return <div className="loading"><span className="logo-mark">S</span><p>Opening your workspace…</p>{error && <p className="error-text">{error}</p>}</div>;
@@ -133,11 +166,11 @@ function App() {
           <section className="card"><div className="section-title"><div><span className="section-number">03</span><h2>Final details</h2></div><span className="section-hint">Almost there</span></div><div className="field-pair"><div className={`field-card ${highlight === 'delivery' ? 'is-highlighted' : ''}`} id="field-delivery" onClick={() => focusField('delivery')}><label htmlFor="delivery-input">Delivery charge</label><div className="input-with-prefix"><span>₹</span><input id="delivery-input" type="number" min="0" step="1" key={`delivery-${invoice.revision}`} defaultValue={invoice.deliveryCents / 100} onBlur={(event) => { const next = Math.round(Number(event.target.value) * 100); if (next !== invoice.deliveryCents && Number.isFinite(next) && next >= 0) void edit('set_delivery', { deliveryCents: next }); }} /></div><small>Shown separately on the invoice</small></div><div className={`field-card ${highlight === 'terms' ? 'is-highlighted' : ''}`} id="field-terms" onClick={() => focusField('terms')}><label htmlFor="terms-select">Payment terms</label><select id="terms-select" value={invoice.terms} onChange={(event) => void edit('set_terms', { terms: event.target.value })}><option value="due_on_receipt">Due on receipt</option><option value="net_15">Net 15</option><option value="net_30">Net 30</option></select><small>Sets the payment due date</small></div></div></section>
         </div>
 
-        <div className="preview-column"><section className={`preview-card ${highlight === 'preview' ? 'is-highlighted' : ''}`} id="field-preview" onClick={() => focusField('preview')}><div className="preview-top"><span>LIVE PREVIEW</span><span className={`status-pill ${invoice.status === 'saved' ? 'saved' : ''}`}>{invoice.status === 'saved' ? '✓ Saved draft' : '● Unsaved draft'}</span></div><div className="preview-header"><div className="preview-emblem">S</div><div><small>INVOICE</small><strong>#{invoice.id.slice(0, 8).toUpperCase()}</strong></div></div><div className="preview-rule" /><div className="preview-meta"><div><small>BILL TO</small><strong>{customer?.name ?? 'Your customer'}</strong><span>{customer?.city ?? 'Add a customer to begin'}</span></div><div><small>ISSUED</small><strong>{dateLabel(invoice.issueDate)}</strong><span>Due {dateLabel(dueDate(invoice))}</span></div></div><div className="preview-items-head"><span>DESCRIPTION</span><span>AMOUNT</span></div>{invoice.items.length ? invoice.items.map((item) => { const product = products.find((entry) => entry.id === item.productId)!; return <div className="preview-item" key={item.id}><div><strong>{product.name}</strong><span>{item.quantity} × {money(product.priceCents)}</span></div><strong>{money(item.quantity * product.priceCents)}</strong></div>; }) : <div className="preview-empty">Items will appear here as you add them.</div>}<div className="preview-delivery"><span>Delivery</span><strong>{money(invoice.deliveryCents)}</strong></div><div className="preview-total"><span>Total due</span><strong>{money(total)}</strong></div><div className="preview-footer">{termsLabel[invoice.terms]} · Created with ShowMe</div></section><button className="save-button" onClick={() => void edit('save_draft')} disabled={!customer || !invoice.items.length}><span>{invoice.status === 'saved' ? 'Save draft again' : 'Save invoice draft'}</span><span>↗</span></button><button className="undo-button" onClick={() => void edit('undo')}>↶ Undo last ShowMe edit</button><p className="save-note">This saves a draft in your workspace. Nothing is sent to your customer.</p><div className="field-tip"><span>✦</span><p>{state.focus ? help[state.focus] : 'Click any field and ask “What does this mean?”'}</p></div></div></div>
+        <div className="preview-column"><section className={`preview-card ${highlight === 'preview' ? 'is-highlighted' : ''}`} id="field-preview" onClick={() => focusField('preview')}><div className="preview-top"><span>LIVE PREVIEW</span><span className={`status-pill ${invoice.status === 'saved' ? 'saved' : ''}`}>{invoice.status === 'saved' ? '✓ Saved draft' : '● Unsaved draft'}</span></div><div className="preview-header"><div className="preview-emblem">S</div><div><small>INVOICE</small><strong>#{invoice.id.slice(0, 8).toUpperCase()}</strong></div></div><div className="preview-rule" /><div className="preview-meta"><div><small>BILL TO</small><strong>{customer?.name ?? 'Your customer'}</strong><span>{customer?.city ?? 'Add a customer to begin'}</span></div><div><small>ISSUED</small><strong>{dateLabel(invoice.issueDate)}</strong><span>Due {dateLabel(dueDate(invoice))}</span></div></div><div className="preview-items-head"><span>DESCRIPTION</span><span>AMOUNT</span></div>{invoice.items.length ? invoice.items.map((item) => { const product = products.find((entry) => entry.id === item.productId)!; return <div className="preview-item" key={item.id}><div><strong>{product.name}</strong><span>{item.quantity} × {money(product.priceCents)}</span></div><strong>{money(item.quantity * product.priceCents)}</strong></div>; }) : <div className="preview-empty">Items will appear here as you add them.</div>}<div className="preview-delivery"><span>Delivery</span><strong>{money(invoice.deliveryCents)}</strong></div><div className="preview-total"><span>Total due</span><strong>{money(total)}</strong></div><div className="preview-footer">{termsLabel[invoice.terms]} · Created with ShowMe</div></section><button className="save-button" onClick={() => void edit('save_draft')} disabled={!customer || !invoice.items.length}><span>{invoice.status === 'saved' ? 'Save draft again' : 'Save invoice draft'}</span><span>↗</span></button><button className="undo-button" onClick={() => void edit('undo')}>↶ Undo last ShowMe edit</button><p className="save-note">This saves a draft in your workspace. Nothing is sent to your customer.</p>{invoice.status === 'saved' && <div className="feedback-box"><strong>Was ShowMe useful for this invoice?</strong><div><button type="button" aria-pressed={feedback === 'yes'} onClick={() => { setFeedback('yes'); track('helpful_yes'); }}>Yes</button><button type="button" aria-pressed={feedback === 'no'} onClick={() => { setFeedback('no'); track('helpful_no'); }}>Needs work</button></div><small>Optional feedback. No conversation text is stored here.</small></div>}<div className="field-tip"><span>✦</span><p>{state.focus ? help[state.focus] : 'Click any field and ask “What does this mean?”'}</p></div></div></div>
       </div>
     </main>
 
-    <aside className="assistant-panel"><div className="assistant-head"><div className="assistant-brand"><span className="assistant-orb">✳</span><div><strong>ShowMe</strong><small>Your guide, right here</small></div></div><span className="assistant-menu">···</span></div><div className="assistant-intro"><span className="sparkle">✳</span><h2>How can I help?</h2><p>I’m here to make this easier. Tell me what you want done, or ask me to show you how.</p></div><div className="mode-box"><div className="mode-heading"><span>HOW SHOULD I HELP?</span><span className="mode-sparkle">✦</span></div><div className="mode-options">{(['guide', 'collaborate', 'delegate', 'manual'] as Mode[]).map((entry) => <button type="button" key={entry} className={mode === entry ? 'selected' : ''} aria-pressed={mode === entry} onClick={() => void chooseMode(entry)}>{modeLabel[entry]}</button>)}</div></div><div className="chat-messages" aria-live="polite">{messages.map((message) => <div className={`chat-bubble ${message.speaker}`} key={message.id}>{message.speaker === 'agent' && <span className="bubble-avatar">✳</span>}<p>{message.text}</p></div>)}</div><div className="assistant-bottom"><div className="voice-row"><span className={`voice-indicator ${voiceStatus === 'Listening' ? 'listening' : ''}`} /> <span>{voiceAvailable ? voiceStatus : 'Voice needs an AssemblyAI API key'}</span><button className={`mic-button ${voiceStatus === 'Listening' ? 'on' : ''}`} disabled={!voiceAvailable} onClick={() => void toggleVoice()} aria-label={voiceRef.current ? 'Stop voice' : 'Start voice'}>{voiceRef.current ? '■' : '◉'}</button></div><form className="composer" onSubmit={(event) => { event.preventDefault(); sendTyped(); }}><input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={voiceRef.current ? 'Or type a message…' : 'Start voice to send messages'} disabled={!voiceRef.current} aria-label="Message ShowMe" /><button disabled={!voiceRef.current || !typed.trim()} aria-label="Send message">➤</button></form><p className="assistant-footnote">ShowMe can edit drafts. You approve anything that leaves this workspace.</p></div></aside>
+    <aside className="assistant-panel"><div className="assistant-head"><div className="assistant-brand"><span className="assistant-orb">✳</span><div><strong>ShowMe</strong><small>Your guide, right here</small></div></div><span className="assistant-menu">···</span></div><div className="assistant-intro"><span className="sparkle">✳</span><h2>How can I help?</h2><p>I’m here to make this easier. Tell me what you want done, or ask me to show you how.</p></div><div className="mode-box"><div className="mode-heading"><span>HOW SHOULD I HELP?</span><span className="mode-sparkle">✦</span></div><div className="mode-options">{(['guide', 'collaborate', 'delegate', 'manual'] as Mode[]).map((entry) => <button type="button" key={entry} className={mode === entry ? 'selected' : ''} aria-pressed={mode === entry} onClick={() => void chooseMode(entry)}>{modeLabel[entry]}</button>)}</div></div><div className="chat-messages" aria-live="polite">{messages.map((message) => <div className={`chat-bubble ${message.speaker}`} key={message.id}>{message.speaker === 'agent' && <span className="bubble-avatar">✳</span>}<p>{message.text}</p></div>)}</div><div className="assistant-bottom"><div className="voice-row"><span className={`voice-indicator ${voiceStatus === 'Listening' ? 'listening' : ''}`} /> <span>{voiceAvailable ? voiceStatus : 'Assistant unavailable until configured'}</span><button className={`mic-button ${voiceStatus === 'Listening' ? 'on' : ''}`} disabled={!voiceAvailable || connecting} onClick={() => void toggleVoice()} aria-label={voiceRef.current?.inputMode === 'voice' ? 'Stop voice' : 'Start voice'}>{voiceRef.current?.inputMode === 'voice' ? '■' : '◉'}</button></div><form className="composer" onSubmit={(event) => { event.preventDefault(); void sendTyped(); }}><input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Ask ShowMe by typing…" disabled={!voiceAvailable || connecting} aria-label="Message ShowMe" /><button disabled={!voiceAvailable || connecting || !typed.trim()} aria-label="Send message">➤</button></form><p className="assistant-footnote">ShowMe can edit drafts. You approve anything that leaves this workspace.</p></div></aside>
   </div>;
 }
 

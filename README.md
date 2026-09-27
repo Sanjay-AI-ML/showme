@@ -31,7 +31,7 @@ Open `http://localhost:3001`. This is a local server, not a public deployment. T
 - Add a customer, catalog items, delivery, and payment terms; edit quantities and see a calculated preview.
 - Save a draft. Manual edits to a saved draft return it to unsaved status until saved again.
 - Use Guide me, Do it with me, Do it for me, or manual takeover. Guide and manual modes block agent business edits on the server.
-- With an AssemblyAI key, talk to the assistant or send typed messages in the same voice session. It reads structured host state, highlights fields, explains fields, and requests bounded invoice actions.
+- With an AssemblyAI key, talk to the assistant or start a text conversation without microphone access. Both paths use the same bounded host actions. Text-only sessions still use AssemblyAI's voice-agent service.
 - Agent and manual edits share revision checks. Retried action IDs are idempotent. Undo targets an agent edit and checks for later changes to the same field.
 
 The invoice application is the first host. `client/src/host.ts` defines its integration boundary. The voice controller is in `client/src/voice.ts`; the server's authoritative invoice logic is in `server/store.ts`.
@@ -44,6 +44,10 @@ npm run build
 ```
 
 Current automated tests cover quantity correction and totals, mode permissions, stale edit rejection, idempotency, undo with later manual work, and save validation. Voice interaction still requires a real AssemblyAI key, microphone permission, and live testing. The product has not yet been validated with end users or a second host application.
+
+With the local server running and a key configured, `npm run smoke:text` exercises a real text-agent session against an in-memory invoice and checks the final saved state and spoken confirmation. It calls AssemblyAI and uses provider minutes.
+
+For user testing, follow [VALIDATION.md](VALIDATION.md). The app records local event counts and optional saved-draft feedback without storing conversation text in its validation table. Run `npm run validation:report` for descriptive counts; they are not task-accuracy or demand metrics.
 
 ## Current limitations
 

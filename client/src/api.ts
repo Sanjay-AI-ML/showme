@@ -18,4 +18,5 @@ export const api = {
   mode: (mode: Mode) => request<AppState>('/api/mode', 'POST', { mode }),
   focus: (focus: FocusTarget | null) => request<AppState>('/api/focus', 'POST', { focus }),
   voiceToken: () => request<{ token: string }>('/api/voice-token', 'POST', {}),
+  validationEvent: (kind: string, channel: 'voice' | 'text' | null) => request<{ ok: true }>('/api/validation-event', 'POST', { kind, channel }),
 };

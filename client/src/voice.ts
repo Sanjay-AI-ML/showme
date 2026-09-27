@@ -8,6 +8,7 @@ interface VoiceEvents {
   error: (message: string) => void;
   highlight: (target: FocusTarget) => void;
 }
+export type InputMode = 'voice' | 'text';
 
 type PendingTool = { call_id: string; name: string; arguments: Record<string, unknown> };
 const fieldHelp: Record<FocusTarget, string> = {
@@ -56,6 +57,7 @@ function base64(bytes: Uint8Array): string {
 }
 
 export class ShowMeVoice {
+  inputMode: InputMode = 'voice';
   private ws: WebSocket | null = null;
   private audioContext: AudioContext | null = null;
   private stream: MediaStream | null = null;
@@ -68,28 +70,43 @@ export class ShowMeVoice {
   private busy = false;
   private lastEvent = '';
   private ended = false;
+  private introComplete = false;
+  private introFinished = false;
+  private queuedText: string[] = [];
+  private textTurnInFlight = false;
+  private nextTextTimer: ReturnType<typeof setTimeout> | null = null;
+  private requestTimer: ReturnType<typeof setTimeout> | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopPromise: Promise<void> | null = null;
   constructor(private host: HostAdapter, private events: VoiceEvents) {}
 
-  async start() {
+  isReady() { return this.ready && this.ws?.readyState === WebSocket.OPEN; }
+
+  async start(inputMode: InputMode = 'voice') {
+    this.inputMode = inputMode;
     this.ended = false;
-    this.events.status('Connecting…');
+    this.introComplete = false;
+    this.introFinished = false;
+    this.events.status(inputMode === 'voice' ? 'Connecting voice…' : 'Connecting chat…');
     const { token } = await api.voiceToken();
-    const audioContext = new AudioContext();
-    this.audioContext = audioContext;
-    await audioContext.resume();
-    await audioContext.audioWorklet.addModule('/audio-processor.js');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } });
-    this.stream = stream;
-    const source = audioContext.createMediaStreamSource(stream);
-    const worklet = new AudioWorkletNode(audioContext, 'showme-mic');
-    const zero = audioContext.createGain(); zero.gain.value = 0;
-    source.connect(worklet).connect(zero).connect(audioContext.destination);
-    this.source = source; this.worklet = worklet;
-    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-      if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: 'input.audio', audio: base64(new Uint8Array(event.data)) }));
-      }
-    };
+    if (inputMode === 'voice') {
+      const audioContext = new AudioContext();
+      this.audioContext = audioContext;
+      await audioContext.resume();
+      await audioContext.audioWorklet.addModule('/audio-processor.js');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } });
+      this.stream = stream;
+      const source = audioContext.createMediaStreamSource(stream);
+      const worklet = new AudioWorkletNode(audioContext, 'showme-mic');
+      const zero = audioContext.createGain(); zero.gain.value = 0;
+      source.connect(worklet).connect(zero).connect(audioContext.destination);
+      this.source = source; this.worklet = worklet;
+      worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'input.audio', audio: base64(new Uint8Array(event.data)) }));
+        }
+      };
+    }
     const initialState = await this.host.getContext();
     const ws = new WebSocket(`wss://agents.assemblyai.com/v1/ws?token=${encodeURIComponent(token)}`);
     this.ws = ws;
@@ -102,10 +119,71 @@ export class ShowMeVoice {
     ws.onmessage = (event) => { void this.handle(JSON.parse(event.data)); };
     ws.onerror = () => this.events.error('Voice connection error. You can keep editing the invoice manually.');
     ws.onclose = () => { this.ready = false; if (!this.ended) this.events.status('Disconnected'); };
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => finish(new Error('Assistant connection timed out.')), 12000);
+      function finish(error?: Error) {
+        clearTimeout(timeout);
+        ws.removeEventListener('message', onMessage);
+        ws.removeEventListener('error', onError);
+        ws.removeEventListener('close', onClose);
+        if (error) reject(error); else resolve();
+      }
+      function onMessage(event: MessageEvent) {
+        try {
+          const message = JSON.parse(String(event.data));
+          if (message.type === 'session.ready') finish();
+          if (message.type === 'session.error') finish(new Error(String(message.message ?? 'Assistant connection failed.')));
+        } catch { finish(new Error('Invalid assistant response.')); }
+      }
+      function onError() { finish(new Error('Assistant connection failed.')); }
+      function onClose() { finish(new Error('Assistant connection closed.')); }
+      ws.addEventListener('message', onMessage);
+      ws.addEventListener('error', onError);
+      ws.addEventListener('close', onClose);
+    });
+    if (inputMode === 'text') {
+      await new Promise<void>((resolve, reject) => {
+        if (this.introFinished) { resolve(); return; }
+        const timeout = setTimeout(() => finish(new Error('Assistant greeting timed out.')), 12000);
+        const self = this;
+        function finish(error?: Error) {
+          clearTimeout(timeout);
+          ws.removeEventListener('message', onMessage);
+          ws.removeEventListener('close', onClose);
+          if (error) reject(error); else resolve();
+        }
+        function onMessage(event: MessageEvent) {
+          try {
+            const message = JSON.parse(String(event.data));
+            if (message.type === 'reply.done' && self.introFinished) finish();
+            if (message.type === 'session.error') finish(new Error(String(message.message ?? 'Assistant greeting failed.')));
+          } catch { finish(new Error('Invalid assistant response.')); }
+        }
+        function onClose() { finish(new Error('Assistant connection closed.')); }
+        ws.addEventListener('message', onMessage);
+        ws.addEventListener('close', onClose);
+      });
+      this.events.status('Chat ready');
+      this.scheduleTextIdle();
+    }
   }
 
   async stop() {
+    if (this.stopPromise) return this.stopPromise;
+    this.stopPromise = this.finishStop();
+    try { await this.stopPromise; }
+    finally { this.stopPromise = null; }
+  }
+
+  private async finishStop() {
     this.ended = true; this.ready = false; this.pending = [];
+    this.queuedText = []; this.textTurnInFlight = false;
+    if (this.nextTextTimer) clearTimeout(this.nextTextTimer);
+    this.nextTextTimer = null;
+    if (this.requestTimer) clearTimeout(this.requestTimer);
+    this.requestTimer = null;
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
     this.flushAudio();
     const socket = this.ws;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -132,14 +210,40 @@ export class ShowMeVoice {
     this.stream?.getTracks().forEach((track) => track.stop());
     await this.audioContext?.close();
     this.audioContext = null;
-    this.events.status('Voice off');
+    this.events.status('Assistant off');
   }
 
   sayText(text: string) {
-    if (!this.ready || !this.ws) throw new Error('Start voice first to send a typed message.');
-    this.ws.send(JSON.stringify({ type: 'conversation.message', role: 'user', content: text }));
-    this.ws.send(JSON.stringify({ type: 'reply.create' }));
+    if (!this.isReady() || !this.ws) throw new Error('Assistant is connecting. Try again shortly.');
+    this.scheduleTextIdle();
     this.events.transcript('user', text);
+    if (this.inputMode === 'text') {
+      this.queuedText.push(text);
+      if (!this.textTurnInFlight) this.sendNextText();
+    } else {
+      this.sendTextFrame(text);
+    }
+  }
+
+  private sendTextFrame(text: string) {
+    this.ws?.send(JSON.stringify({ type: 'conversation.message', role: 'user', content: text }));
+    this.requestTimer = setTimeout(() => {
+      this.requestTimer = null;
+      if (this.isReady()) this.ws?.send(JSON.stringify({ type: 'reply.create', instructions: `Respond to the user's typed request and use the permitted tools when appropriate. The request is: ${JSON.stringify(text)}` }));
+    }, 1000);
+  }
+
+  private sendNextText() {
+    const next = this.queuedText.shift();
+    if (!next) { this.textTurnInFlight = false; return; }
+    this.textTurnInFlight = true;
+    this.sendTextFrame(next);
+  }
+
+  private scheduleTextIdle() {
+    if (this.inputMode !== 'text') return;
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => { void this.stop(); }, 5 * 60_000);
   }
 
   notifyHostChange(state: AppState) {
@@ -150,20 +254,38 @@ export class ShowMeVoice {
 
   private async handle(event: Record<string, unknown>) {
     const type = event.type;
-    if (type === 'session.ready') { this.ready = true; this.events.status('Listening'); }
+    if (type === 'session.ready') { this.ready = true; if (this.inputMode === 'voice') this.events.status('Listening'); }
     else if (type === 'transcript.user') this.events.transcript('user', String(event.text ?? ''));
-    else if (type === 'transcript.agent') this.events.transcript('agent', String(event.text ?? ''));
+    else if (type === 'transcript.agent') {
+      if (this.inputMode === 'text' && !this.introComplete) this.introComplete = true;
+      else this.events.transcript('agent', String(event.text ?? ''));
+    }
     else if (type === 'reply.audio' && typeof event.data === 'string') this.play(event.data);
     else if (type === 'tool.call') {
+      if (this.nextTextTimer) clearTimeout(this.nextTextTimer);
+      this.nextTextTimer = null;
       this.pending.push({ call_id: String(event.call_id), name: String(event.name), arguments: (event.arguments ?? {}) as Record<string, unknown> });
       if (this.lastEvent === 'reply.done') await this.drain();
     }
     else if (type === 'reply.done') {
       this.lastEvent = 'reply.done';
+      this.scheduleTextIdle();
+      if (this.inputMode === 'text' && this.introComplete && !this.textTurnInFlight) this.introFinished = true;
       if (event.status === 'interrupted') { this.pending = []; this.flushAudio(); }
-      else await this.drain();
+      else {
+        const hadToolCalls = this.pending.length > 0 || this.busy;
+        await this.drain();
+        if (this.inputMode === 'text' && this.textTurnInFlight && !hadToolCalls) {
+          if (this.nextTextTimer) clearTimeout(this.nextTextTimer);
+          this.nextTextTimer = setTimeout(() => { this.nextTextTimer = null; this.textTurnInFlight = false; this.sendNextText(); }, 250);
+        }
+      }
     }
-    else if (type === 'reply.started' || type === 'input.speech.started') this.lastEvent = type;
+    else if (type === 'reply.started' || type === 'input.speech.started') {
+      this.lastEvent = type;
+      if (this.nextTextTimer) clearTimeout(this.nextTextTimer);
+      this.nextTextTimer = null;
+    }
     else if (type === 'session.error') this.events.error(String(event.message ?? 'Voice session error.'));
   }
 

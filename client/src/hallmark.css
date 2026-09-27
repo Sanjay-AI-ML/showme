@@ -119,6 +119,12 @@ input:disabled, select:disabled, button:disabled { opacity: .56; cursor: not-all
 .undo-button { min-height: 44px; background: transparent; border-color: var(--color-rule-strong); color: var(--color-accent); font-size: 12px; }
 .undo-button:hover { background: var(--color-panel); }
 .save-note { color: var(--color-muted); font-size: 11px; }
+.feedback-box { margin-top: var(--space-md); border-top: 1px solid var(--color-rule); padding: var(--space-sm) var(--space-3xs); }
+.feedback-box strong { display: block; color: var(--color-ink); font: 700 13px var(--font-display); }
+.feedback-box > div { display: flex; gap: var(--space-2xs); margin-top: var(--space-xs); }
+.feedback-box button { min-height: 40px; border: 1px solid var(--color-rule-strong); border-radius: 6px; background: var(--color-paper); color: var(--color-ink-soft); padding: var(--space-2xs) var(--space-xs); font-size: 12px; }
+.feedback-box button:hover, .feedback-box button[aria-pressed='true'] { border-color: var(--color-accent); background: var(--color-accent-pale); color: var(--color-accent); }
+.feedback-box small { display: block; margin-top: var(--space-2xs); font-size: 11px; color: var(--color-muted); }
 .field-tip { color: var(--color-accent); font-size: 13px; padding: var(--space-sm) var(--space-xs); }
 .field-tip p { color: var(--color-ink-soft); }
 .field-card.is-highlighted, .preview-card.is-highlighted { outline: 3px solid var(--color-focus); }
