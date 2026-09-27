@@ -76,8 +76,9 @@ export class ShowMeVoice {
     const { token } = await api.voiceToken();
     const audioContext = new AudioContext();
     this.audioContext = audioContext;
+    await audioContext.resume();
     await audioContext.audioWorklet.addModule('/audio-processor.js');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } });
     this.stream = stream;
     const source = audioContext.createMediaStreamSource(stream);
     const worklet = new AudioWorkletNode(audioContext, 'showme-mic');
@@ -106,8 +107,27 @@ export class ShowMeVoice {
   async stop() {
     this.ended = true; this.ready = false; this.pending = [];
     this.flushAudio();
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'session.end' }));
-    this.ws?.close(); this.ws = null;
+    const socket = this.ws;
+    if (socket?.readyState === WebSocket.OPEN) {
+      const liveSocket = socket;
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(finish, 2000);
+        function finish() {
+          clearTimeout(timeout);
+          liveSocket.removeEventListener('message', onMessage);
+          liveSocket.removeEventListener('close', finish);
+          resolve();
+        }
+        function onMessage(event: MessageEvent) {
+          try { if (JSON.parse(String(event.data)).type === 'session.ended') finish(); }
+          catch { /* ignore unrelated frames */ }
+        }
+        liveSocket.addEventListener('message', onMessage);
+        liveSocket.addEventListener('close', finish);
+        liveSocket.send(JSON.stringify({ type: 'session.end' }));
+      });
+    }
+    socket?.close(); this.ws = null;
     this.worklet?.disconnect(); this.source?.disconnect();
     this.stream?.getTracks().forEach((track) => track.stop());
     await this.audioContext?.close();
