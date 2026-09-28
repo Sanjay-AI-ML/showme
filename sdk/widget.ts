@@ -51,11 +51,12 @@ export function createWidgetController<State>(host: WidgetHost<State>) {
     if (!action.description.trim() || action.parameters.type !== 'object') throw new Error(`Action ${action.name} needs a description and object parameters.`);
     actions.set(action.name, action);
   }
-  let mode: WidgetMode = host.initialMode ?? 'collaborate';
-  if (!modes.has(mode)) throw new Error('Unsupported initial assistance mode.');
+  const availableModes: WidgetMode[] = actions.size ? [...modes] : ['guide', 'manual'];
+  let mode: WidgetMode = host.initialMode ?? (actions.size ? 'collaborate' : 'guide');
+  if (!availableModes.includes(mode)) throw new Error('Unsupported initial assistance mode.');
   const modeListeners = new Set<(mode: WidgetMode) => void>();
   async function changeMode(next: WidgetMode) {
-    if (!modes.has(next)) throw new Error('Unsupported assistance mode.');
+    if (!availableModes.includes(next)) throw new Error('Unsupported assistance mode.');
     await host.onModeChange?.(next);
     mode = next;
     for (const listener of modeListeners) listener(mode);
@@ -74,7 +75,7 @@ export function createWidgetController<State>(host: WidgetHost<State>) {
   const summarize = (state: State) => ({ mode, focusedField: host.focusedField?.() ?? null, task: host.summarize(state) });
   const tools: unknown[] = [
     { type: 'function', name: 'read_context', description: 'Refresh the current verified task state when details are missing or the user asks what is on screen. Action tools already read and validate the latest host state.', parameters: { type: 'object', properties: {} } },
-    { type: 'function', name: 'change_mode', description: 'Switch between guidance, collaboration, delegation and manual takeover when the user requests it.', parameters: { type: 'object', properties: { mode: { type: 'string', enum: [...modes] } }, required: ['mode'] } },
+    { type: 'function', name: 'change_mode', description: 'Switch between the available assistance modes when the user requests it.', parameters: { type: 'object', properties: { mode: { type: 'string', enum: availableModes } }, required: ['mode'] } },
     ...host.actions.map(({ name, description, parameters }) => ({ type: 'function', name, description, parameters })),
   ];
   if (host.fieldHelp && Object.keys(host.fieldHelp).length) tools.push({
@@ -112,9 +113,10 @@ export function createWidgetController<State>(host: WidgetHost<State>) {
     integration,
     bridge,
     getMode: () => mode,
+    availableModes,
     setMode: changeMode,
     onMode(listener: (mode: WidgetMode) => void) { modeListeners.add(listener); return () => modeListeners.delete(listener); },
-    reset() { bridge.reset(); mode = 'collaborate'; for (const listener of modeListeners) listener(mode); },
+    reset() { bridge.reset(); mode = host.initialMode ?? (actions.size ? 'collaborate' : 'guide'); for (const listener of modeListeners) listener(mode); },
   };
 }
 
@@ -149,7 +151,7 @@ export function mountShowMe<State>(options: WidgetOptions<State>): WidgetHandle<
   title.textContent = options.name;
   const modeLabels: Record<WidgetMode, string> = { guide: 'Guide me', collaborate: 'Do it with me', delegate: 'Do it for me', manual: 'I’ll take over' };
   const modeButtons = new Map<WidgetMode, HTMLButtonElement>();
-  for (const mode of modes) {
+  for (const mode of controller.availableModes) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = modeLabels[mode];
     button.addEventListener('click', () => { void setMode(mode).catch(showError); });

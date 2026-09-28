@@ -1,5 +1,41 @@
 # Embed ShowMe in an existing app
 
+## Fastest install: guidance on any website you own
+
+Deploy ShowMe once, register your website's exact HTTPS origin in `EMBED_CLIENTS_JSON`, and add this script near the end of the website's HTML:
+
+```html
+<script defer src="https://showme.example.com/embed/showme.js"
+  data-showme-name="My app"
+  data-showme-session="/api/showme/session"></script>
+```
+
+This adds a floating **Ask ShowMe** launcher. The widget automatically reads the visible page title, path, headings, control labels, and alerts so it can explain the current screen by voice or text. It does not read form values, URL query strings, hidden elements, or content marked `data-showme-private`. This quick install is **guidance-only**: it cannot click buttons, submit forms, or edit data. The widget shows only Guide me and I'll take over in this mode.
+
+To try the one-script version locally with ShowMe's existing same-origin token route, run `npm run build && npm start` and open `/page-guide-demo.html`. Its HTML uses `data-showme-token-endpoint="/api/voice-token"`; this direct-token option is only for a token route on the **same website**. A separate website should use the hosted session flow below.
+
+The script needs one small endpoint on your website's **server**. Authenticate the visitor there, then exchange your private registration secret for a short-lived session:
+
+```js
+app.get('/api/showme/session', requireSignedInUser, async (_req, res) => {
+  const response = await fetch('https://showme.example.com/api/embed/session', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.SHOWME_EMBED_SECRET}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ clientId: 'my_app' }),
+  });
+  if (!response.ok) return res.sendStatus(502);
+  const { sessionToken } = await response.json();
+  res.set('Cache-Control', 'no-store').json({ sessionToken });
+});
+```
+
+Keep the secret on the server. The script is served by your ShowMe deployment, and the host page's Content Security Policy must allow that script, inline widget styles, connections to the ShowMe backend and `wss://agents.assemblyai.com`, and a Blob URL for the microphone worklet. If you use an incompatible CSP, use the SDK's `audioWorkletUrl` option for the worklet; custom stylesheet loading is not yet supported by the quick install. The website must use HTTPS for microphone access. For a site built with JavaScript modules, you can instead import `mountShowMeOnPage` from the SDK and pass the same settings.
+
+## Add approved actions when you need edits
+
 ShowMe provides a framework-neutral panel and a bounded voice-agent controller. Your app keeps its own UI, authentication, data, and business API. ShowMe reads a small task snapshot and calls only the actions you register. The working example is at `/widget-demo` in this repository; its source is `client/src/widget-demo.tsx`.
 
 Build this repository with `npm run build`, then install the local package in the host app with `npm install --install-links /path/to/showme/sdk` (use the equivalent path on Windows). The flag copies the built package into the host app instead of linking to a folder outside its dev server. Reinstall after changing the SDK. The package is private and has not been published to npm.

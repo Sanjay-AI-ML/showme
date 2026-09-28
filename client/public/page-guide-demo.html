@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sample support desk</title>
+  <style>
+    body { margin: 0; background: #f5f4ef; color: #193429; font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 720px; margin: 10vh auto; padding: 24px; }
+    h1 { font-size: clamp(32px, 6vw, 56px); letter-spacing: -.04em; }
+    form { display: grid; gap: 16px; margin-top: 28px; padding: 24px; background: #fff; border: 1px solid #d8e0d6; border-radius: 16px; }
+    label { display: grid; gap: 6px; font-weight: 600; }
+    input, select { padding: 10px; border: 1px solid #aebfaf; border-radius: 8px; font: inherit; }
+    button { width: fit-content; border: 0; border-radius: 8px; padding: 12px 16px; background: #205f40; color: #fff; font: 600 14px system-ui; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Support desk</h1>
+    <p>Try the floating Ask ShowMe button. This example installs the guidance widget with one script tag.</p>
+    <form>
+      <label>Subject <input name="subject" placeholder="Briefly describe the issue" /></label>
+      <label>Priority <select name="priority"><option>Normal</option><option>Urgent</option></select></label>
+      <button type="button">Create ticket</button>
+    </form>
+  </main>
+  <script defer src="/embed/showme.js" data-showme-name="Support desk"
+    data-showme-token-endpoint="/api/voice-token"></script>
+</body>
+</html>

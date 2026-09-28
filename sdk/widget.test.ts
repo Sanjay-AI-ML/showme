@@ -35,3 +35,15 @@ test('widget rejects ambiguous or duplicate action registrations', () => {
   assert.throws(() => createWidgetController({ name: 'Tickets', read: async () => ({ revision: 0 }), revisionOf: (s) => s.revision,
     summarize: (s) => s, actions: [action, action] }), /duplicate/);
 });
+
+test('guidance-only widget does not offer modes that imply it can edit', async () => {
+  const controller = createWidgetController({ name: 'Help page', read: async () => ({ revision: 1 }),
+    revisionOf: (state) => state.revision, summarize: (state) => state, actions: [] });
+  assert.deepEqual(controller.availableModes, ['guide', 'manual']);
+  assert.equal(controller.getMode(), 'guide');
+  await assert.rejects(() => controller.setMode('delegate'), /Unsupported assistance mode/);
+  assert.deepEqual((controller.integration.tools[1] as { parameters: { properties: { mode: { enum: string[] } } } })
+    .parameters.properties.mode.enum, ['guide', 'manual']);
+  controller.reset();
+  assert.equal(controller.getMode(), 'guide');
+});

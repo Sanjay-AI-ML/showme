@@ -63,7 +63,15 @@ try {
   assert.equal(page.status, 200);
   assert.equal((await fetch(base + '/profile')).status, 200);
   assert.equal((await fetch(base + '/widget-demo')).status, 200);
+  const guideDemo = await fetch(base + '/page-guide-demo.html');
+  assert.equal(guideDemo.status, 200);
+  assert.match(await guideDemo.text(), /data-showme-token-endpoint="\/api\/voice-token"/);
+  const embedScript = await fetch(base + '/embed/showme.js');
+  assert.equal(embedScript.status, 200);
+  assert.match(embedScript.headers.get('content-type') ?? '', /javascript/);
+  assert.match(await embedScript.text(), /Ask ShowMe/);
   assert.match(page.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+  assert.match(page.headers.get('content-security-policy') ?? '', /style-src[^;]*'unsafe-inline'/);
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.equal((await fetch(base + '/api/auth').then((response) => response.json())).authenticated, false);
   const embedPreflight = await fetch(base + '/api/embed/voice-token', {

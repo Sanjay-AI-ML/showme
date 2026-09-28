@@ -15,7 +15,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:5173` for the invoice studio, `http://localhost:5173/profile` for the customer-profile editor, or `http://localhost:5173/widget-demo` to see ShowMe mounted inside a separate customer-record UI. All manual editors work without an API key. The microphone and typed assistant turn on when a valid AssemblyAI key is present in the server environment. The key stays on the server; the browser receives a short-lived token. Never commit `.env` or a real key.
+Open `http://localhost:5173` for the invoice studio, `http://localhost:5173/profile` for the customer-profile editor, or `http://localhost:5173/widget-demo` for the action-enabled widget. All manual editors work without an API key. The microphone and typed assistant turn on when a valid AssemblyAI key is present in the server environment. The key stays on the server; the browser receives a short-lived token. Never commit `.env` or a real key.
 
 For a production-style local run:
 
@@ -25,6 +25,8 @@ npm start
 ```
 
 Open `http://localhost:3001`. In local development, each browser gets an anonymous workspace cookie and synthetic sample catalog records. Production mode requires an invitation code and a server-side session; each new pilot workspace starts with an empty catalog that the pilot can fill. The Node server persists data in `data/showme.sqlite`, which is ignored by Git.
+
+Open `http://localhost:3001/page-guide-demo.html` to try the one-script guidance install on a sample support page.
 
 ## What works today
 
@@ -37,7 +39,7 @@ Open `http://localhost:3001`. In local development, each browser gets an anonymo
 - Invite-only pilots can export their local invoice/action data or delete their workspace from Account & data.
 - Edit a customer profile manually or through ShowMe, correct a preference naturally, and undo compatible agent edits. The profile screen shows the current task step and a short change history, and ShowMe understands the focused field when asked about “this field.” Profile data has its own server actions, revision checks, and mode rules. It is included in pilot export and deletion.
 
-Both [invoice](client/src/host.ts) and [profile](client/src/profile-host.ts) adapters use the reusable host bridge. The [embeddable widget](sdk/README.md) packages the panel, task controller, and voice transport for another website. The server's authoritative invoice and profile logic live in `server/store.ts` and `server/profile-store.ts`.
+Both [invoice](client/src/host.ts) and [profile](client/src/profile-host.ts) adapters use the reusable host bridge. The [embeddable widget](sdk/README.md) now has a script-tag install for guidance on a website you own; approved edits use the SDK's explicit host actions. The server's authoritative invoice and profile logic live in `server/store.ts` and `server/profile-store.ts`.
 
 ## Verification
 

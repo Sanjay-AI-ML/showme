@@ -7,7 +7,7 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite --host 0.0.0.0",
-    "build": "node scripts/embed-widget-assets.mjs && tsc --noEmit && tsc -p tsconfig.server.json && vite build && tsc -p tsconfig.sdk.json && node scripts/copy-sdk-assets.mjs",
+    "build": "node scripts/embed-widget-assets.mjs && tsc --noEmit && tsc -p tsconfig.server.json && vite build && tsc -p tsconfig.sdk.json && vite build --config vite.embed.config.ts && node scripts/copy-sdk-assets.mjs",
     "start": "node dist/server/index.js",
     "test": "tsx --test server/*.test.ts sdk/*.test.ts examples/*.test.ts",
     "smoke:production": "npm run build && tsx scripts/production-smoke.ts",
