@@ -2,7 +2,7 @@
 
 ShowMe provides a framework-neutral panel and a bounded voice-agent controller. Your app keeps its own UI, authentication, data, and business API. ShowMe reads a small task snapshot and calls only the actions you register. The working example is at `/widget-demo` in this repository; its source is `client/src/widget-demo.tsx`.
 
-Build this repository with `npm run build`, then install the local package in the host app with `npm install D:\AssemblyAI\sdk`. The package is private and has not been published to npm.
+Build this repository with `npm run build`, then install the local package in the host app with `npm install --install-links /path/to/showme/sdk` (use the equivalent path on Windows). The flag copies the built package into the host app instead of linking to a folder outside its dev server. Reinstall after changing the SDK. The package is private and has not been published to npm.
 
 ```ts
 import { mountShowMe, createHostedTokenProvider } from '@showme/host-sdk';
@@ -52,6 +52,6 @@ For a website on a different origin, put a private registration in ShowMe's serv
 EMBED_CLIENTS_JSON=[{"id":"pilot_host","origin":"https://pilot.example.com","secret":"replace-with-a-random-32-plus-character-secret"}]
 ```
 
-Implement `GET /api/showme/session` on the **host server**. It must authenticate its own user, then make a server-to-server `POST https://showme.example.com/api/embed/session` with `Authorization: Bearer <registration secret>` and JSON `{ "clientId": "pilot_host" }`. Return only the resulting `{ "sessionToken": "..." }` to the browser. `createHostedTokenProvider` exchanges that short-lived token for an AssemblyAI voice token. Never put the registration secret or AssemblyAI key in browser code. Keep both origins on HTTPS for microphone access and configure the host page's CSP to allow `connect-src` to the ShowMe backend and `wss://agents.assemblyai.com`; its `worker-src` must allow its own bundled worklet. Register the host's exact origin in `EMBED_CLIENTS_JSON`.
+Implement `GET /api/showme/session` on the **host server**. It must authenticate its own user, then make a server-to-server `POST https://showme.example.com/api/embed/session` with `Authorization: Bearer <registration secret>` and JSON `{ "clientId": "pilot_host" }`. Return only the resulting `{ "sessionToken": "..." }` to the browser. `createHostedTokenProvider` exchanges that short-lived token for an AssemblyAI voice token. Never put the registration secret or AssemblyAI key in browser code. Keep both origins on HTTPS for microphone access and configure the host page's CSP to allow `connect-src` to the ShowMe backend and `wss://agents.assemblyai.com`. The default microphone worklet is bundled as a Blob URL; allow that URL in the host CSP, or pass `audioWorkletUrl` pointing to a worklet file served from the host origin. Register the host's exact origin in `EMBED_CLIENTS_JSON`.
 
 Hosted sessions are held in ShowMe process memory for ten minutes; they are lost on restart and are intended for one server instance. The widget code and styles are packaged together, but a real integration still requires the small host session endpoint and bounded host business endpoints. For a same-origin ShowMe installation, the demo uses its existing `/api/voice-token` endpoint directly.

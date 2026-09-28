@@ -51,8 +51,6 @@ export class ShowMeVoice<State> {
   private busy = false;
   private lastEvent = '';
   private ended = false;
-  private introComplete = false;
-  private introFinished = false;
   private queuedText: string[] = [];
   private textTurnInFlight = false;
   private nextTextTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,8 +65,6 @@ export class ShowMeVoice<State> {
   async start(inputMode: InputMode = 'voice') {
     this.inputMode = inputMode;
     this.ended = false;
-    this.introComplete = false;
-    this.introFinished = false;
     this.events.status(inputMode === 'voice' ? 'Connecting voice…' : 'Connecting chat…');
     const { token } = await this.options.tokenProvider();
     if (inputMode === 'voice') {
@@ -94,7 +90,7 @@ export class ShowMeVoice<State> {
     this.ws = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: 'session.update', session: {
       system_prompt: this.integration.systemPrompt(initialState),
-      greeting: this.integration.greeting,
+      ...(inputMode === 'voice' ? { greeting: this.integration.greeting } : {}),
       tools: this.integration.tools,
       output: { voice: 'alba' },
     } }));
@@ -124,27 +120,6 @@ export class ShowMeVoice<State> {
       ws.addEventListener('close', onClose);
     });
     if (inputMode === 'text') {
-      await new Promise<void>((resolve, reject) => {
-        if (this.introFinished) { resolve(); return; }
-        const timeout = setTimeout(() => finish(new Error('Assistant greeting timed out.')), 12000);
-        const self = this;
-        function finish(error?: Error) {
-          clearTimeout(timeout);
-          ws.removeEventListener('message', onMessage);
-          ws.removeEventListener('close', onClose);
-          if (error) reject(error); else resolve();
-        }
-        function onMessage(event: MessageEvent) {
-          try {
-            const message = JSON.parse(String(event.data));
-            if (message.type === 'reply.done' && self.introFinished) finish();
-            if (message.type === 'session.error') finish(new Error(String(message.message ?? 'Assistant greeting failed.')));
-          } catch { finish(new Error('Invalid assistant response.')); }
-        }
-        function onClose() { finish(new Error('Assistant connection closed.')); }
-        ws.addEventListener('message', onMessage);
-        ws.addEventListener('close', onClose);
-      });
       this.events.status('Chat ready');
       this.scheduleTextIdle();
     }
@@ -238,10 +213,7 @@ export class ShowMeVoice<State> {
     const type = event.type;
     if (type === 'session.ready') { this.ready = true; if (this.inputMode === 'voice') this.events.status('Listening'); }
     else if (type === 'transcript.user') this.events.transcript('user', String(event.text ?? ''));
-    else if (type === 'transcript.agent') {
-      if (this.inputMode === 'text' && !this.introComplete) this.introComplete = true;
-      else this.events.transcript('agent', String(event.text ?? ''));
-    }
+    else if (type === 'transcript.agent') this.events.transcript('agent', String(event.text ?? ''));
     else if (type === 'reply.audio' && typeof event.data === 'string') this.play(event.data);
     else if (type === 'tool.call') {
       if (this.nextTextTimer) clearTimeout(this.nextTextTimer);
@@ -252,7 +224,6 @@ export class ShowMeVoice<State> {
     else if (type === 'reply.done') {
       this.lastEvent = 'reply.done';
       this.scheduleTextIdle();
-      if (this.inputMode === 'text' && this.introComplete && !this.textTurnInFlight) this.introFinished = true;
       if (event.status === 'interrupted') { this.pending = []; this.flushAudio(); }
       else {
         const hadToolCalls = this.pending.length > 0 || this.busy;

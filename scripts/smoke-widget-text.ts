@@ -59,5 +59,7 @@ try {
   agent.sayText('Actually, use email instead.');
   await waitFor(() => profiles.getState(workspaceId).profile.preferredContact === 'email', 'correction');
   assert.equal(profiles.getState(workspaceId).revision, 3);
+  assert.equal(replies.some((reply) => /Hi,? I(?:’|'| a)m ShowMe|What would you like to do in/i.test(reply)), false,
+    `A typed request received a startup greeting: ${replies.join(' | ')}`);
   console.log('Live widget text-agent smoke passed: name, preference, and correction.');
 } finally { await agent.stop(); store.db.close(); }
