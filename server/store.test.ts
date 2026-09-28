@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
 import { Store, AppError } from './store.js';
 
 function fixture() { const store = new Store(); const token = store.createWorkspace(); return { store, token }; }
@@ -94,4 +96,90 @@ test('validation report counts outcomes without recording conversation content',
   assert.equal('content' in raw, false);
   assert.throws(() => store.recordValidationEvent(token, { kind: 'unknown', channel: 'text' }),
     (error: unknown) => error instanceof AppError && error.code === 'invalid_validation_event');
+});
+
+test('pilot invitation reopens its workspace, isolates others, and sign-out revokes a session', () => {
+  const store = new Store();
+  const first = store.signInInvite('invite-one-hash');
+  edit(store, first, 'select_customer', { customerId: 'sunrise' });
+  const returnSession = store.signInInvite('invite-one-hash');
+  const other = store.signInInvite('invite-two-hash');
+  assert.equal(store.getState(returnSession).invoice.customerId, 'sunrise');
+  assert.equal(store.getState(other).invoice.customerId, null);
+  assert.notEqual(first, returnSession);
+  store.revokePilotSession(first);
+  assert.equal(store.pilotInviteForSession(first), null);
+  assert.throws(() => store.getState(first), (error: unknown) => error instanceof AppError && error.code === 'unauthorized');
+  assert.equal(store.getState(returnSession).invoice.customerId, 'sunrise');
+});
+
+test('pilot can export and permanently delete its own local workspace', () => {
+  const store = new Store();
+  const own = store.signInInvite('own-invite');
+  const other = store.signInInvite('other-invite');
+  edit(store, own, 'select_customer', { customerId: 'sunrise' });
+  store.recordValidationEvent(own, { kind: 'turn', channel: 'text' });
+  const exported = store.exportPilotWorkspace(own);
+  assert.equal(exported.invoice.customerId, 'sunrise');
+  assert.equal(exported.actions.length, 1);
+  assert.equal(exported.actions[0].before.customerId, null);
+  assert.equal(exported.actions[0].after.customerId, 'sunrise');
+  assert.equal(exported.validationEvents.length, 1);
+  store.deletePilotWorkspace(own);
+  assert.equal(store.pilotInviteForSession(own), null);
+  assert.throws(() => store.getState(own), (error: unknown) => error instanceof AppError && error.code === 'unauthorized');
+  assert.equal(store.getState(other).invoice.customerId, null);
+  const fresh = store.signInInvite('own-invite');
+  assert.equal(store.getState(fresh).invoice.customerId, null);
+});
+
+test('production workspaces own their catalog and calculate totals from its prices', () => {
+  const store = new Store(':memory:', { seedCatalog: false });
+  const first = store.signInInvite('catalog-one');
+  const second = store.signInInvite('catalog-two');
+  assert.deepEqual(store.getState(first).customers, []);
+  assert.deepEqual(store.getState(first).products, []);
+  const { customer } = store.addCustomer(first, { name: 'Pilot Furniture', city: 'Pune', email: 'billing@pilot.example' });
+  const { product } = store.addProduct(first, { name: 'Custom chair', description: 'Oak', priceCents: 345000 });
+  assert.deepEqual(store.getState(second).customers, []);
+  assert.deepEqual(store.getState(second).products, []);
+  assert.throws(() => edit(store, second, 'select_customer', { customerId: customer.id }),
+    (error: unknown) => error instanceof AppError && error.code === 'unknown_customer');
+  edit(store, first, 'select_customer', { customerId: customer.id });
+  edit(store, first, 'upsert_item', { productId: product.id, quantity: 3 });
+  assert.equal(store.getState(first).lastAction?.totalCents, 1035000);
+  assert.throws(() => store.addProduct(first, { name: 'custom CHAIR', description: '', priceCents: 1 }),
+    (error: unknown) => error instanceof AppError && error.code === 'duplicate_product');
+  assert.throws(() => store.addCustomer(first, { name: 'Invalid', city: 'Pune', email: 'not-email' }),
+    (error: unknown) => error instanceof AppError && error.code === 'invalid_customer');
+  store.deletePilotWorkspace(first);
+  assert.equal((store.db.prepare('SELECT COUNT(*) AS total FROM products').get() as { total: number }).total, 0);
+});
+
+test('catalog migration preserves existing fixture-based invoice drafts', () => {
+  const root = resolve('data');
+  mkdirSync(root, { recursive: true });
+  const dir = mkdtempSync(resolve(root, 'migration-test-'));
+  try {
+    const path = resolve(dir, 'showme.sqlite');
+    const old = new Store(path);
+    const token = old.createWorkspace();
+    edit(old, token, 'select_customer', { customerId: 'sunrise' });
+    edit(old, token, 'upsert_item', { productId: 'chair', quantity: 2 });
+    old.db.exec('DELETE FROM customers; DELETE FROM products; PRAGMA user_version = 0;');
+    old.db.close();
+    const migrated = new Store(path, { seedCatalog: false });
+    assert.equal(migrated.getState(token).invoice.customerId, 'sunrise');
+    assert.equal(migrated.getState(token).lastAction?.totalCents, 500000);
+    assert.ok(migrated.getState(token).customers.some((customer) => customer.id === 'sunrise'));
+    assert.ok(migrated.getState(token).products.some((product) => product.id === 'chair'));
+    const added = migrated.addProduct(token, { name: 'Custom shelf', description: 'Wall mounted', priceCents: 12345 }).product;
+    migrated.db.close();
+    const reopened = new Store(path, { seedCatalog: false });
+    assert.ok(reopened.getState(token).products.some((product) => product.id === added.id && product.priceCents === 12345));
+    reopened.db.close();
+  } finally {
+    assert.ok(resolve(dir).startsWith(root + sep));
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

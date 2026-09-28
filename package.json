@@ -7,11 +7,16 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
-    "start": "tsx server/index.ts",
-    "test": "tsx --test server/*.test.ts",
+    "build": "node scripts/embed-widget-assets.mjs && tsc --noEmit && tsc -p tsconfig.server.json && vite build && tsc -p tsconfig.sdk.json && node scripts/copy-sdk-assets.mjs",
+    "start": "node dist/server/index.js",
+    "test": "tsx --test server/*.test.ts sdk/*.test.ts examples/*.test.ts",
+    "smoke:production": "npm run build && tsx scripts/production-smoke.ts",
+    "backup": "node dist/scripts/backup.js",
+    "backup:dev": "tsx scripts/backup.ts",
     "validation:report": "tsx scripts/validation-report.ts",
-    "smoke:text": "tsx scripts/smoke-text.ts"
+    "smoke:text": "tsx scripts/smoke-text.ts",
+    "smoke:profile-text": "tsx scripts/smoke-profile-text.ts",
+    "smoke:widget-text": "tsx scripts/smoke-widget-text.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.4",

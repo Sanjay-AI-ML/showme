@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { api } from '../client/src/api.js';
 import { ShowMeVoice } from '../client/src/voice.js';
+import { createInvoiceVoiceIntegration } from '../client/src/invoice-voice.js';
 import type { HostAdapter } from '../client/src/host.js';
 import { Store } from '../server/store.js';
 
@@ -24,10 +25,10 @@ const host: HostAdapter = {
 };
 let agentError = '';
 const agentMessages: string[] = [];
-const agent = new ShowMeVoice(host, {
+const agent = new ShowMeVoice(createInvoiceVoiceIntegration(host), {
   status: () => {}, transcript: (speaker, text) => { if (speaker === 'agent') agentMessages.push(text); }, highlight: () => {},
   error: (message) => { agentError = message; },
-});
+}, { tokenProvider: api.voiceToken });
 
 async function waitFor(check: () => boolean, label: string) {
   const deadline = Date.now() + 25000;

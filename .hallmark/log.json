@@ -4,6 +4,13 @@
     "macrostructure": "Workbench",
     "theme": "ShowMe green",
     "enrichment": "none",
+    "brief": "Finish onboarding, catalog, account, and action feedback inside the existing invoice workspace"
+  },
+  {
+    "date": "2026-09-27",
+    "macrostructure": "Workbench",
+    "theme": "ShowMe green",
+    "enrichment": "none",
     "brief": "Improve the existing ShowMe invoice workspace while preserving its workflow and brand"
   }
 ]

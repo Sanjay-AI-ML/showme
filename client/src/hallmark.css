@@ -1,5 +1,5 @@
 /* Hallmark · macrostructure: Workbench · genre: modern-minimal · theme: ShowMe green · motion: cut */
-/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R5 V4 */
 @import '../../tokens.css';
 
 html, body { overflow-x: clip; }
@@ -35,7 +35,7 @@ input:disabled, select:disabled, button:disabled { opacity: .56; cursor: not-all
 .eyebrow { font-size: 11px; letter-spacing: .15em; color: var(--color-accent); }
 .eyebrow-line { border-color: var(--color-accent); }
 .page-heading h1 { font-family: var(--font-display); font-size: clamp(32px, 3vw, 46px); line-height: 1.13; letter-spacing: -.045em; margin: var(--space-sm) 0 var(--space-xs); overflow-wrap: anywhere; min-width: 0; }
-.page-heading h1 em { color: var(--color-accent); font-style: normal; }
+.page-heading h1 span { color: var(--color-accent); font-style: normal; }
 .page-heading p { font-size: 14px; color: var(--color-ink-soft); line-height: 1.55; max-width: 55ch; }
 .heading-note { border-top: 2px solid var(--color-accent); padding-top: var(--space-xs); }
 .heading-note span { font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--color-accent); }
@@ -214,4 +214,90 @@ input:disabled, select:disabled, button:disabled { opacity: .56; cursor: not-all
 }
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
+}
+
+/* Workspace setup and account controls stay within the existing workbench system. */
+.pilot-login { min-height: 100svh; display: grid; place-items: center; padding: var(--space-md); background: var(--color-canvas); color: var(--color-ink); }
+.pilot-login-card { width: min(100%, 460px); padding: var(--space-xl); background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-dialog); box-shadow: var(--shadow-lift); }
+.pilot-login-card .logo-mark { display: grid; place-items: center; margin-bottom: var(--space-lg); }
+.pilot-login-card h1 { font: 800 clamp(30px, 7vw, 40px)/1.12 var(--font-display); letter-spacing: -.04em; margin: var(--space-sm) 0; }
+.pilot-login-card p { color: var(--color-ink-soft); line-height: 1.55; }
+.pilot-login-card label { display: block; font-weight: 700; margin: var(--space-lg) 0 var(--space-2xs); }
+.pilot-login-card input { width: 100%; min-height: 48px; border: 1px solid var(--color-rule-strong); border-radius: 7px; padding: 0 var(--space-xs); font: inherit; }
+.pilot-login-card button { width: 100%; min-height: 48px; margin-top: var(--space-sm); border: 0; border-radius: 7px; background: var(--color-accent); color: var(--color-accent-ink); font: 700 14px var(--font-body); }
+.pilot-login-card button:hover:not(:disabled) { background: var(--color-accent-hover); }
+.pilot-login-card button:disabled { opacity: .56; }
+.signout-button, .account-nav { border: 0; background: transparent; color: var(--color-accent); font: 600 12px var(--font-body); text-decoration: underline; text-underline-offset: 3px; }
+.signout-button { margin-left: auto; }
+.account-nav { margin: var(--space-xs); text-align: left; min-height: 40px; }
+.signout-button:hover, .account-nav:hover { color: var(--color-accent-hover); }
+
+.setup-panel { display: flex; gap: var(--space-lg); align-items: end; justify-content: space-between; margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-panel); border: 1px solid var(--color-rule); border-radius: var(--radius-card); }
+.setup-panel > div:first-child { min-width: 0; }
+.setup-label { display: block; color: var(--color-accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.setup-panel h2 { font: 800 21px/1.2 var(--font-display); letter-spacing: -.035em; margin: var(--space-2xs) 0; }
+.setup-panel p { color: var(--color-ink-soft); font-size: 13px; line-height: 1.5; margin: 0; max-width: 54ch; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: var(--space-2xs); flex: none; }
+.setup-actions button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); min-height: 44px; padding: var(--space-2xs) var(--space-xs); border: 1px solid var(--color-accent); border-radius: 7px; background: var(--color-paper); color: var(--color-accent); font: 700 12px var(--font-body); white-space: nowrap; }
+.setup-actions button:hover { background: var(--color-accent-pale); }
+.setup-actions button:active { background: var(--color-panel-strong); }
+
+.action-receipt { display: flex; align-items: center; gap: var(--space-xs); margin: 0 0 var(--space-md); padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-rule); border-radius: 7px; background: var(--color-paper); color: var(--color-ink); }
+.receipt-marker { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--color-accent-pale); color: var(--color-success); font-size: 14px; }
+.action-receipt strong, .action-receipt span:not(.receipt-marker) { display: block; font-size: 12px; }
+.action-receipt strong { font-weight: 800; }
+.action-receipt small { margin-left: auto; color: var(--color-muted); font-size: 11px; white-space: nowrap; }
+
+.catalog-card { padding: var(--space-sm) var(--space-md); background: var(--color-card-tint); }
+.catalog-card summary { display: flex; justify-content: space-between; gap: var(--space-sm); color: var(--color-accent); cursor: pointer; font: 800 13px var(--font-body); list-style: none; }
+.catalog-card summary::-webkit-details-marker { display: none; }
+.catalog-card summary::before { content: '+'; margin-right: var(--space-2xs); }
+.catalog-card[open] summary::before { content: '−'; }
+.catalog-card summary span { margin-left: auto; color: var(--color-muted); font-size: 11px; font-weight: 500; }
+.catalog-card summary:hover { color: var(--color-accent-hover); }
+.catalog-card summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; border-radius: 3px; }
+.catalog-card form { display: grid; gap: var(--space-2xs); margin-top: var(--space-md); }
+.catalog-card label { margin: var(--space-2xs) 0 0; }
+.catalog-card input { width: 100%; min-height: 44px; border: 1px solid var(--color-rule-strong); border-radius: 7px; background: var(--color-paper); padding: var(--space-2xs) var(--space-xs); color: var(--color-ink); font: 14px var(--font-body); }
+.catalog-card input:hover { border-color: var(--color-accent); }
+.catalog-card button { min-height: 44px; margin-top: var(--space-xs); border: 0; border-radius: 7px; background: var(--color-accent); color: var(--color-accent-ink); font: 700 13px var(--font-body); }
+.catalog-card button:hover:not(:disabled) { background: var(--color-accent-hover); }
+
+.account-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: var(--space-sm); background: var(--color-scrim); }
+.account-dialog { position: relative; width: min(100%, 520px); max-height: calc(100svh - 32px); overflow: auto; background: var(--color-paper); border-radius: var(--radius-dialog); padding: var(--space-lg); color: var(--color-ink); box-shadow: var(--shadow-lift); }
+.account-dialog h2 { font: 800 28px/1.2 var(--font-display); letter-spacing: -.04em; margin: var(--space-xs) 0; }
+.account-dialog p { font-size: 13px; color: var(--color-ink-soft); line-height: 1.55; }
+.account-close { position: absolute; top: var(--space-sm); right: var(--space-sm); display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: transparent; color: var(--color-muted); font-size: 25px; }
+.account-close:hover { color: var(--color-ink); }
+.account-export, .account-signout, .account-danger button { min-height: 44px; margin: var(--space-xs) var(--space-2xs) var(--space-xs) 0; padding: var(--space-2xs) var(--space-sm); border-radius: 7px; font: 700 13px var(--font-body); }
+.account-export { border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-accent-ink); }
+.account-export:hover { background: var(--color-accent-hover); }
+.account-signout { border: 1px solid var(--color-rule-strong); background: var(--color-paper); color: var(--color-accent); }
+.account-signout:hover { background: var(--color-panel); }
+.account-danger { border-top: 1px solid var(--color-rule); margin-top: var(--space-sm); padding-top: var(--space-md); }
+.account-danger strong { color: var(--color-danger); }
+.account-danger label { display: block; font-size: 12px; font-weight: 700; margin: var(--space-sm) 0 var(--space-2xs); }
+.account-danger input { width: 100%; min-height: 44px; border: 1px solid var(--color-rule-strong); border-radius: 7px; padding: 0 var(--space-xs); }
+.account-danger button { display: block; border: 0; background: var(--color-danger); color: var(--color-inverse); }
+.account-danger button:hover:not(:disabled) { filter: brightness(.9); }
+.account-danger button:disabled { background: var(--color-danger-pale); color: var(--color-danger); }
+.error-text { color: var(--color-danger); }
+
+@media (max-width: 980px) {
+  .account-nav { margin: 0 var(--space-2xs); white-space: nowrap; }
+}
+@media (max-width: 650px) {
+  .sidebar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3xs); }
+  .brand { grid-column: 1; min-width: 0; }
+  .nav-item { grid-column: 2; margin: 0; }
+  .account-nav { grid-column: 1 / -1; margin: 0; min-height: 36px; }
+  .setup-panel { display: block; }
+  .setup-actions { margin-top: var(--space-sm); }
+  .setup-actions button { flex: 1; }
+  .account-dialog { padding: var(--space-md); }
+}
+@media (max-width: 375px) {
+  .account-nav { font-size: 11px; }
+  .setup-actions { display: grid; }
+  .action-receipt small { display: none; }
 }

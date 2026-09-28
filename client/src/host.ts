@@ -1,4 +1,5 @@
-import type { AppState, EditRequest, EditResult, FocusTarget, Mode } from '../../shared/types';
+import type { AppState, Customer, EditRequest, EditResult, FocusTarget, Mode, Product } from '../../shared/types';
+import { createHostBridge } from '../../sdk/host-bridge';
 import { api } from './api';
 
 /** The host adapter is ShowMe's boundary with an application. */
@@ -11,19 +12,18 @@ export interface HostAdapter {
 }
 
 export class InvoiceHostAdapter implements HostAdapter {
-  private listeners = new Set<(state: AppState) => void>();
-  private latest: AppState | null = null;
-  async getContext() { const state = await api.state(); this.publish(state); return state; }
-  async execute(edit: EditRequest) { const result = await api.edit(edit); this.publish(result.state); return result; }
-  async setMode(mode: Mode) { const state = await api.mode(mode); this.publish(state); return state; }
-  async focus(target: FocusTarget | null) { const state = await api.focus(target); this.publish(state); return state; }
-  onChange(listener: (state: AppState) => void) {
-    this.listeners.add(listener);
-    if (this.latest) listener(this.latest);
-    return () => this.listeners.delete(listener);
-  }
-  private publish(state: AppState) {
-    this.latest = state;
-    for (const listener of this.listeners) listener(state);
-  }
+  private bridge = createHostBridge<AppState, EditRequest, EditResult>({
+    read: api.state,
+    write: api.edit,
+    stateOf: (result) => result.state,
+    revisionOf: (state) => state.invoice.revision,
+  });
+  getContext() { return this.bridge.getContext(); }
+  execute(edit: EditRequest) { return this.bridge.execute(edit); }
+  addCustomer(customer: Omit<Customer, 'id'>) { return this.bridge.apply(() => api.addCustomer(customer), (result) => result.state); }
+  addProduct(product: Omit<Product, 'id'>) { return this.bridge.apply(() => api.addProduct(product), (result) => result.state); }
+  setMode(mode: Mode) { return this.bridge.apply(() => api.mode(mode), (state) => state); }
+  focus(target: FocusTarget | null) { return this.bridge.apply(() => api.focus(target), (state) => state); }
+  onChange(listener: (state: AppState) => void) { return this.bridge.onChange(listener); }
+  reset() { this.bridge.reset(); }
 }

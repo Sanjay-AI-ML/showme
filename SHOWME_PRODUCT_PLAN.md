@@ -1,6 +1,12 @@
 # ShowMe: product strategy and build plan
 
-Research date: September 27, 2026. Status: proposed design; no application has been implemented or tested. User has selected ShowMe and confirmed all three experiences: guided learning, fast execution, and combined teaching/execution. The goal is a useful product and substantial portfolio project; the hackathon is the first public release milestone. Market demand, user outcomes, and technical performance remain hypotheses until measured.
+Research date: September 27, 2026. Status: working invite-only pilot with invoice and customer-profile hosts, shared voice transport, validated server actions, and automated production checks. User has selected ShowMe and confirmed all three experiences: guided learning, fast execution, and combined teaching/execution. The goal is a useful product and substantial portfolio project; the hackathon is the first public release milestone. Market demand and user outcomes remain hypotheses until measured.
+
+## Current product bet
+
+ShowMe now has two working host applications. The profile workflow tracks whether a customer name and reachable preferred contact are complete, shows a short authoritative change history, and sends the focused field to the assistant so “What does this mean?” can refer to the control the user is using. This makes the product's claim more concrete: the assistant should help a user reach a verified task outcome and recover from corrections in the actual application.
+
+The next proof is user behavior, not another broad feature. Run five observed sessions with people unfamiliar with the app. Give each person a target profile and invoice task; record whether they finish correctly, where they ask for help, whether corrections preserve unrelated work, and whether they can repeat the task with less assistance. Compare with manual completion. Do not treat a successful agent transcript as evidence of learning or demand. A real host-company pilot still needs a workflow whose onboarding cost matters enough to justify integration.
 
 ## Product promise
 

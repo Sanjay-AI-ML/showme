@@ -19,7 +19,14 @@
   --color-danger: #a34932;
   --color-danger-pale: #fff1e9;
   --color-inverse: #ffffff;
+  --color-scrim: oklch(20% 0.025 155 / .72);
+  --color-success: oklch(42% 0.09 150);
+  --color-card-tint: oklch(97% 0.015 145);
   --shadow-lift: 0 12px 30px #20392b0d;
+  --radius-card: 10px;
+  --radius-dialog: 16px;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --dur-fast: 150ms;
   --space-3xs: 4px;
   --space-2xs: 8px;
   --space-xs: 12px;
